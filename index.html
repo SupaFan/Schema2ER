@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据库 ER 图可视化工具</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .toolbar {
+      position: fixed;
+      top: 20px;
+      left: 1%;
+      background: white;
+      padding: 12px 24px;
+      border-radius: 12px;
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      z-index: 100;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .toolbar h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-right: 20px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: #e0e0e0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #d0d0d0;
+    }
+
+    #canvas {
+      display: block;
+      cursor: default;
+    }
+
+    .info {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      color: #666;
+      font-size: 12px;
+      background: white;
+      padding: 10px 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .legend {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      color: #333;
+      font-size: 13px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .legend-title {
+      font-weight: 600;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 8px 0;
+    }
+
+    .legend-shape {
+      width: 24px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .legend-rect {
+      width: 24px;
+      height: 16px;
+      border: 2px solid #333;
+      background: #fff;
+    }
+
+    .legend-diamond {
+      width: 18px;
+      height: 18px;
+      border: 2px solid #333;
+      background: #fff;
+      transform: rotate(45deg);
+    }
+
+    .legend-ellipse {
+      width: 24px;
+      height: 14px;
+      border: 2px solid #333;
+      background: #fff;
+      border-radius: 50%;
+    }
+
+    .legend-line {
+      width: 24px;
+      height: 2px;
+      background: #333;
+    }
+
+    /* 输入面板 */
+    .input-panel {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      width: 400px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      z-index: 100;
+      overflow: hidden;
+      transition: all 0.3s;
+    }
+
+    .input-panel.collapsed {
+      width: 200px;
+    }
+
+    .input-panel.collapsed .panel-content {
+      display: none;
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+    }
+
+    .panel-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .panel-content {
+      padding: 16px;
+    }
+
+    .panel-content textarea {
+      width: 100%;
+      height: 300px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 12px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .panel-content textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .panel-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .panel-buttons .btn {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+
+    .sample-btn {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .sample-btn:hover {
+      background: #bbdefb;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>📊 数据库 ER 图工具</h1>
+    <button class="btn btn-secondary" onclick="resetLayout()">重置布局</button>
+    <button class="btn btn-secondary" onclick="autoLayout()">自动排列</button>
+    <button class="btn btn-secondary" onclick="toggleLabels()">切换属性显示</button>
+    <button class="btn btn-primary" onclick="exportPNG()">导出 PNG</button>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <div class="input-panel" id="inputPanel">
+    <div class="panel-header" onclick="togglePanel()">
+      <h3>📝 导入 SQL 结构</h3>
+      <span id="panelToggle">▼</span>
+    </div>
+    <div class="panel-content">
+      <textarea id="sqlInput" placeholder="粘贴 CREATE TABLE 语句...
+
+示例:
+CREATE TABLE users (
+  id INT PRIMARY KEY,
+  name VARCHAR(100),
+  email VARCHAR(255)
+);"></textarea>
+      <div class="panel-buttons">
+        <button class="btn sample-btn" onclick="loadSample()">加载示例</button>
+        <button class="btn btn-primary" onclick="parseSQL()">生成 ER 图</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="info">
+    拖拽实体(矩形)时属性会跟随移动 | 单独拖拽属性(椭圆)可调整位置
+  </div>
+
+  <div class="legend">
+    <div class="legend-title">图例说明</div>
+    <div class="legend-item">
+      <div class="legend-shape"><div class="legend-rect"></div></div>
+      <span>实体 (Entity)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-shape"><div class="legend-diamond"></div></div>
+      <span>关系 (Relationship)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-shape"><div class="legend-ellipse"></div></div>
+      <span>属性 (Attribute)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-shape"><div class="legend-ellipse" style="background:#ffeb3b;"></div></div>
+      <span>主键属性</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-shape"><div class="legend-line"></div></div>
+      <span>连接线</span>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // 是否显示所有属性
+    let showAllAttributes = true;
+
+    // 实体定义（矩形）
+    let entities = [];
+
+    // 关系定义（菱形）
+    let relationships = [];
+
+    // 字段名中文映射
+    const fieldTranslations = {
+      'id': 'ID',
+      'user_id': '用户ID',
+      'admin_id': '管理员ID',
+      'badge_id': '徽章ID',
+      'username': '用户名',
+      'password': '密码',
+      'nickname': '昵称',
+      'mobile': '手机号',
+      'email': '邮箱',
+      'avatar': '头像',
+      'openid': 'OpenID',
+      'status': '状态',
+      'points': '积分',
+      'level': '等级',
+      'score': '得分',
+      'accuracy': '准确率',
+      'duration': '时长',
+      'difficulty': '难度',
+      'game_type': '游戏类型',
+      'total_games': '游戏次数',
+      'total_duration': '总时长',
+      'total_score': '总得分',
+      'best_score': '最高分',
+      'consecutive_days': '连续天数',
+      'total_badges': '徽章数',
+      'code': '代码',
+      'name': '名称',
+      'description': '描述',
+      'type': '类型',
+      'rarity': '稀有度',
+      'points_reward': '奖励积分',
+      'progress': '进度',
+      'earned_at': '获得时间',
+      'points_change': '积分变化',
+      'points_after': '变化后积分',
+      'reason': '原因',
+      'reference_id': '关联ID',
+      'stat_date': '统计日期',
+      'created_at': '创建时间',
+      'updated_at': '更新时间',
+    };
+
+    // 表名中文映射
+    const tableTranslations = {
+      'users': '用户',
+      'admins': '管理员',
+      'game_records': '游戏记录',
+      'badges': '徽章',
+      'user_badges': '用户徽章',
+      'points_logs': '积分日志',
+      'user_daily_stats': '每日统计',
+    };
+
+    // 要忽略的字段
+    const ignoreFields = ['created_at', 'updated_at', 'deleted_at', 'created_by', 'updated_by'];
+
+    // 颜色方案
+    const colors = [
+      { bg: '#e3f2fd', border: '#1976d2' },
+      { bg: '#e8f5e9', border: '#388e3c' },
+      { bg: '#fff3e0', border: '#f57c00' },
+      { bg: '#fce4ec', border: '#c2185b' },
+      { bg: '#f3e5f5', border: '#7b1fa2' },
+      { bg: '#e0f7fa', border: '#00838f' },
+      { bg: '#efebe9', border: '#5d4037' },
+      { bg: '#fff8e1', border: '#ffa000' },
+      { bg: '#e8eaf6', border: '#3f51b5' },
+      { bg: '#fce4ec', border: '#e91e63' },
+    ];
+
+    const entityWidth = 100;
+    const entityHeight = 50;
+    const diamondSize = 60;
+    const ellipseWidth = 70;
+    const ellipseHeight = 28;
+
+    let isDragging = false;
+    let dragTarget = null;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+    let hoveredTarget = null;
+
+    // 解析 SQL
+    function parseSQL() {
+      const sqlInput = document.getElementById('sqlInput').value;
+      const parsedEntities = [];
+      const foreignKeys = [];
+
+      // 匹配 CREATE TABLE 语句
+      const tableRegex = /CREATE\s+TABLE\s+[`"]?(\w+)[`"]?\s*\(([\s\S]*?)\)(?:\s*ENGINE|;)/gi;
+      let match;
+
+      while ((match = tableRegex.exec(sqlInput)) !== null) {
+        const tableName = match[1].toLowerCase();
+        const columnsStr = match[2];
+        const attributes = [];
+        let hasPK = false;
+
+        // 解析列
+        const lines = columnsStr.split(',').map(l => l.trim()).filter(l => l);
+
+        lines.forEach(line => {
+          // 跳过约束
+          if (/^(PRIMARY|FOREIGN|UNIQUE|KEY|INDEX|CONSTRAINT)/i.test(line)) {
+            // 提取外键关系
+            const fkMatch = line.match(/FOREIGN\s+KEY\s*\([`"]?(\w+)[`"]?\)\s*REFERENCES\s+[`"]?(\w+)[`"]?\s*\([`"]?(\w+)[`"]?\)/i);
+            if (fkMatch) {
+              foreignKeys.push({
+                table: tableName,
+                column: fkMatch[1].toLowerCase(),
+                refTable: fkMatch[2].toLowerCase(),
+                refColumn: fkMatch[3].toLowerCase()
+              });
+            }
+            return;
+          }
+
+          // 解析字段
+          const colMatch = line.match(/^[`"]?(\w+)[`"]?\s+(\w+(?:\([^)]*\))?)/i);
+          if (colMatch) {
+            const fieldName = colMatch[1].toLowerCase();
+            const fieldType = colMatch[2].toUpperCase();
+
+            // 忽略技术字段
+            if (ignoreFields.includes(fieldName)) return;
+
+            const isPK = /PRIMARY\s+KEY/i.test(line) || fieldName === 'id';
+            if (isPK) hasPK = true;
+
+            attributes.push({
+              name: fieldTranslations[fieldName] || fieldName,
+              field: fieldName,
+              type: fieldType,
+              isPK: isPK,
+              x: 0, y: 0
+            });
+          }
+        });
+
+        if (attributes.length > 0) {
+          parsedEntities.push({
+            name: tableTranslations[tableName] || tableName,
+            tableName: tableName,
+            x: 0, y: 0,
+            color: colors[parsedEntities.length % colors.length].bg,
+            borderColor: colors[parsedEntities.length % colors.length].border,
+            attributes: attributes
+          });
+        }
+      }
+
+      if (parsedEntities.length === 0) {
+        alert('未能解析到有效的表结构，请检查 SQL 格式');
+        return;
+      }
+
+      entities = parsedEntities;
+
+      // 根据外键生成关系
+      relationships = [];
+      const relNames = ['拥有', '属于', '关联', '包含', '引用'];
+      foreignKeys.forEach((fk, i) => {
+        const fromEntity = entities.find(e => e.tableName === fk.table);
+        const toEntity = entities.find(e => e.tableName === fk.refTable);
+        if (fromEntity && toEntity) {
+          relationships.push({
+            name: relNames[i % relNames.length],
+            x: 0, y: 0,
+            from: fromEntity.name,
+            to: toEntity.name,
+            fromCard: 'N',
+            toCard: '1'
+          });
+        }
+      });
+
+      autoLayout();
+    }
+
+    // 加载示例
+    function loadSample() {
+      document.getElementById('sqlInput').value = `-- 用户表
+CREATE TABLE users (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  mobile VARCHAR(20) UNIQUE,
+  nickname VARCHAR(50),
+  avatar VARCHAR(255),
+  openid VARCHAR(100) UNIQUE,
+  points INT DEFAULT 0,
+  level INT DEFAULT 1,
+  consecutive_days INT DEFAULT 0,
+  total_badges INT DEFAULT 0,
+  status TINYINT DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL
+);
+
+-- 管理员表
+CREATE TABLE admins (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  nickname VARCHAR(50),
+  status TINYINT DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL
+);
+
+-- 游戏记录表
+CREATE TABLE game_records (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  game_type VARCHAR(50) NOT NULL,
+  score INT DEFAULT 0,
+  accuracy DECIMAL(5,2),
+  duration INT,
+  difficulty INT DEFAULT 1,
+  created_at DATETIME NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 徽章表
+CREATE TABLE badges (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  code VARCHAR(50) UNIQUE NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  type VARCHAR(50),
+  rarity INT DEFAULT 1,
+  points_reward INT DEFAULT 0,
+  created_at DATETIME NOT NULL
+);
+
+-- 用户徽章表
+CREATE TABLE user_badges (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  badge_id INT NOT NULL,
+  progress INT DEFAULT 0,
+  earned_at DATETIME,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (badge_id) REFERENCES badges(id)
+);
+
+-- 积分日志表
+CREATE TABLE points_logs (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  points_change INT NOT NULL,
+  points_after INT NOT NULL,
+  reason VARCHAR(255),
+  reference_id INT,
+  created_at DATETIME NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- 用户每日统计表
+CREATE TABLE user_daily_stats (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  user_id INT NOT NULL,
+  stat_date DATE NOT NULL,
+  total_games INT DEFAULT 0,
+  total_duration INT DEFAULT 0,
+  total_score INT DEFAULT 0,
+  best_score INT DEFAULT 0,
+  created_at DATETIME NOT NULL,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);`;
+    }
+
+    function togglePanel() {
+      const panel = document.getElementById('inputPanel');
+      const toggle = document.getElementById('panelToggle');
+      panel.classList.toggle('collapsed');
+      toggle.textContent = panel.classList.contains('collapsed') ? '▶' : '▼';
+    }
+
+    // 初始化属性位置
+    function initAttributePositions() {
+      entities.forEach(entity => {
+        const attrCount = entity.attributes.length;
+        if (attrCount === 0) return;
+
+        const startAngle = -Math.PI / 2;
+        const angleStep = (2 * Math.PI) / Math.max(attrCount, 1);
+
+        // 根据属性数量调整半径：超过5个属性时扩大1.3倍
+        const baseRadius = 90;
+        const radius = attrCount > 5 ? baseRadius * 1.3 : baseRadius;
+
+        entity.attributes.forEach((attr, i) => {
+          const angle = startAngle + i * angleStep;
+          attr.x = entity.x + Math.cos(angle) * radius;
+          attr.y = entity.y + Math.sin(angle) * radius;
+        });
+      });
+    }
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      draw();
+    }
+
+    function drawRect(x, y, w, h, color, borderColor) {
+      ctx.fillStyle = color;
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(x - w/2, y - h/2, w, h);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function drawDiamond(x, y, size, color = '#fff') {
+      ctx.fillStyle = color;
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, y - size/2);
+      ctx.lineTo(x + size/2, y);
+      ctx.lineTo(x, y + size/2);
+      ctx.lineTo(x - size/2, y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function drawEllipse(x, y, w, h, isPK = false) {
+      if (isPK) {
+        ctx.fillStyle = '#fff9c4';
+        ctx.strokeStyle = '#f57f17';
+      } else {
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#333';
+      }
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(x, y, w/2, h/2, 0, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function drawText(text, x, y, size = 14, color = '#333') {
+      ctx.fillStyle = color;
+      ctx.font = `${size}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x, y);
+    }
+
+    function drawLine(x1, y1, x2, y2) {
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    function getEntity(name) {
+      return entities.find(e => e.name === name);
+    }
+
+    function draw() {
+      // 背景
+      ctx.fillStyle = '#fafafa';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 网格
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+      ctx.lineWidth = 1;
+      const gridSize = 30;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      if (entities.length === 0) {
+        ctx.fillStyle = '#999';
+        ctx.font = '18px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('请在右侧面板导入 SQL 结构，或点击"加载示例"', canvas.width/2, canvas.height/2);
+        return;
+      }
+
+      // 绘制属性到实体的连线
+      if (showAllAttributes) {
+        entities.forEach(entity => {
+          entity.attributes.forEach(attr => {
+            drawLine(entity.x, entity.y, attr.x, attr.y);
+          });
+        });
+      }
+
+      // 绘制关系连线
+      relationships.forEach(rel => {
+        const fromEntity = getEntity(rel.from);
+        const toEntity = getEntity(rel.to);
+
+        if (fromEntity && toEntity) {
+          // 实体到关系
+          drawLine(fromEntity.x, fromEntity.y, rel.x, rel.y);
+          drawLine(rel.x, rel.y, toEntity.x, toEntity.y);
+
+          // 基数标注
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#c62828';
+
+          // from端基数
+          const fromMidX = (fromEntity.x + rel.x) / 2;
+          const fromMidY = (fromEntity.y + rel.y) / 2;
+          ctx.fillText(rel.fromCard, fromMidX, fromMidY - 10);
+
+          // to端基数
+          const toMidX = (toEntity.x + rel.x) / 2;
+          const toMidY = (toEntity.y + rel.y) / 2;
+          ctx.fillText(rel.toCard, toMidX, toMidY - 10);
+        }
+      });
+
+      // 绘制属性（椭圆）
+      if (showAllAttributes) {
+        entities.forEach(entity => {
+          entity.attributes.forEach(attr => {
+            drawEllipse(attr.x, attr.y, ellipseWidth, ellipseHeight, attr.isPK);
+            drawText(attr.name, attr.x, attr.y, 11, attr.isPK ? '#e65100' : '#333');
+          });
+        });
+      }
+
+      // 绘制实体（矩形）
+      entities.forEach(entity => {
+        drawRect(entity.x, entity.y, entityWidth, entityHeight, entity.color, entity.borderColor);
+        drawText(entity.name, entity.x, entity.y, 14, '#333');
+      });
+
+      // 绘制关系（菱形）
+      relationships.forEach(rel => {
+        drawDiamond(rel.x, rel.y, diamondSize, '#e8eaf6');
+        drawText(rel.name, rel.x, rel.y, 12, '#333');
+      });
+
+      // 高亮悬停
+      if (hoveredTarget) {
+        ctx.strokeStyle = '#2196f3';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5, 5]);
+
+        if (hoveredTarget.type === 'entity') {
+          const e = hoveredTarget.target;
+          ctx.strokeRect(e.x - entityWidth/2 - 5, e.y - entityHeight/2 - 5, entityWidth + 10, entityHeight + 10);
+        } else if (hoveredTarget.type === 'relationship') {
+          const r = hoveredTarget.target;
+          ctx.beginPath();
+          ctx.moveTo(r.x, r.y - diamondSize/2 - 5);
+          ctx.lineTo(r.x + diamondSize/2 + 5, r.y);
+          ctx.lineTo(r.x, r.y + diamondSize/2 + 5);
+          ctx.lineTo(r.x - diamondSize/2 - 5, r.y);
+          ctx.closePath();
+          ctx.stroke();
+        } else if (hoveredTarget.type === 'attribute') {
+          const a = hoveredTarget.target;
+          ctx.beginPath();
+          ctx.ellipse(a.x, a.y, ellipseWidth/2 + 5, ellipseHeight/2 + 5, 0, 0, 2 * Math.PI);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
+    }
+
+    function getTargetAt(x, y) {
+      // 检查属性
+      if (showAllAttributes) {
+        for (const entity of entities) {
+          for (const attr of entity.attributes) {
+            const dx = x - attr.x;
+            const dy = y - attr.y;
+            if (dx*dx/(ellipseWidth*ellipseWidth/4) + dy*dy/(ellipseHeight*ellipseHeight/4) <= 1) {
+              return { type: 'attribute', target: attr, parent: entity };
+            }
+          }
+        }
+      }
+
+      // 检查关系
+      for (const rel of relationships) {
+        if (Math.abs(x - rel.x) < diamondSize/2 && Math.abs(y - rel.y) < diamondSize/2) {
+          return { type: 'relationship', target: rel };
+        }
+      }
+
+      // 检查实体
+      for (const entity of entities) {
+        if (Math.abs(x - entity.x) < entityWidth/2 && Math.abs(y - entity.y) < entityHeight/2) {
+          return { type: 'entity', target: entity };
+        }
+      }
+
+      return null;
+    }
+
+    let lastEntityPos = { x: 0, y: 0 };
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const target = getTargetAt(x, y);
+      if (target) {
+        isDragging = true;
+        dragTarget = target;
+        if (target.type === 'entity') {
+          dragOffsetX = x - target.target.x;
+          dragOffsetY = y - target.target.y;
+          lastEntityPos = { x: target.target.x, y: target.target.y };
+        } else if (target.type === 'relationship') {
+          dragOffsetX = x - target.target.x;
+          dragOffsetY = y - target.target.y;
+        } else if (target.type === 'attribute') {
+          dragOffsetX = x - target.target.x;
+          dragOffsetY = y - target.target.y;
+        }
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      if (isDragging && dragTarget) {
+        if (dragTarget.type === 'entity') {
+          const newX = x - dragOffsetX;
+          const newY = y - dragOffsetY;
+          const deltaX = newX - lastEntityPos.x;
+          const deltaY = newY - lastEntityPos.y;
+
+          dragTarget.target.x = newX;
+          dragTarget.target.y = newY;
+
+          // 属性跟随实体移动
+          dragTarget.target.attributes.forEach(attr => {
+            attr.x += deltaX;
+            attr.y += deltaY;
+          });
+
+          lastEntityPos = { x: newX, y: newY };
+        } else if (dragTarget.type === 'relationship') {
+          dragTarget.target.x = x - dragOffsetX;
+          dragTarget.target.y = y - dragOffsetY;
+        } else if (dragTarget.type === 'attribute') {
+          dragTarget.target.x = x - dragOffsetX;
+          dragTarget.target.y = y - dragOffsetY;
+        }
+        draw();
+      } else {
+        const target = getTargetAt(x, y);
+        if (target !== hoveredTarget) {
+          hoveredTarget = target;
+          canvas.style.cursor = target ? 'grab' : 'default';
+          draw();
+        }
+      }
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      isDragging = false;
+      dragTarget = null;
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      isDragging = false;
+      dragTarget = null;
+      hoveredTarget = null;
+      draw();
+    });
+
+    function resetLayout() {
+      autoLayout();
+    }
+
+    // 自动排列 - 网格布局
+    function autoLayout() {
+      if (entities.length === 0) return;
+
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const padding = 320; // 实体间距
+
+      // 计算最佳网格尺寸（趋近矩形）
+      const count = entities.length;
+      const cols = Math.ceil(Math.sqrt(count * 1.5));
+      const rows = Math.ceil(count / cols);
+
+      const totalWidth = cols * padding;
+      const totalHeight = rows * padding;
+      const startX = centerX - totalWidth / 2 + padding / 2;
+      const startY = centerY - totalHeight / 2 + padding / 2;
+
+      // 按关联数量排序（关联多的放中间）
+      const sortedEntities = [...entities].sort((a, b) => {
+        const aConnections = relationships.filter(r => r.from === a.name || r.to === a.name).length;
+        const bConnections = relationships.filter(r => r.from === b.name || r.to === b.name).length;
+        return bConnections - aConnections;
+      });
+
+      // 网格填充
+      sortedEntities.forEach((entity, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        entity.x = startX + col * padding;
+        entity.y = startY + row * padding;
+      });
+
+      // 重新计算属性位置
+      initAttributePositions();
+
+      // 关系放在实体之间
+      relationships.forEach(rel => {
+        const fromEntity = getEntity(rel.from);
+        const toEntity = getEntity(rel.to);
+        if (fromEntity && toEntity) {
+          rel.x = (fromEntity.x + toEntity.x) / 2;
+          rel.y = (fromEntity.y + toEntity.y) / 2;
+        }
+      });
+
+      draw();
+    }
+
+    function toggleLabels() {
+      showAllAttributes = !showAllAttributes;
+      draw();
+    }
+
+    function exportPNG() {
+      if (entities.length === 0) {
+        alert('请先生成 ER 图');
+        return;
+      }
+
+      // 计算边界
+      let minX = Infinity, minY = Infinity, maxX = 0, maxY = 0;
+      const padding = 100;
+
+      entities.forEach(entity => {
+        minX = Math.min(minX, entity.x - entityWidth/2);
+        maxX = Math.max(maxX, entity.x + entityWidth/2);
+        minY = Math.min(minY, entity.y - entityHeight/2);
+        maxY = Math.max(maxY, entity.y + entityHeight/2);
+
+        if (showAllAttributes) {
+          entity.attributes.forEach(attr => {
+            minX = Math.min(minX, attr.x - ellipseWidth/2);
+            maxX = Math.max(maxX, attr.x + ellipseWidth/2);
+            minY = Math.min(minY, attr.y - ellipseHeight/2);
+            maxY = Math.max(maxY, attr.y + ellipseHeight/2);
+          });
+        }
+      });
+
+      relationships.forEach(rel => {
+        minX = Math.min(minX, rel.x - diamondSize/2);
+        maxX = Math.max(maxX, rel.x + diamondSize/2);
+        minY = Math.min(minY, rel.y - diamondSize/2);
+        maxY = Math.max(maxY, rel.y + diamondSize/2);
+      });
+
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = maxX - minX + padding * 2;
+      exportCanvas.height = maxY - minY + padding * 2;
+      const exportCtx = exportCanvas.getContext('2d');
+
+      // 白色背景
+      exportCtx.fillStyle = '#ffffff';
+      exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+
+      const offsetX = padding - minX;
+      const offsetY = padding - minY;
+
+      // 绘制函数
+      function drawExportLine(x1, y1, x2, y2) {
+        exportCtx.strokeStyle = '#333';
+        exportCtx.lineWidth = 1.5;
+        exportCtx.beginPath();
+        exportCtx.moveTo(x1 + offsetX, y1 + offsetY);
+        exportCtx.lineTo(x2 + offsetX, y2 + offsetY);
+        exportCtx.stroke();
+      }
+
+      function drawExportRect(x, y, w, h, color, borderColor) {
+        exportCtx.fillStyle = color;
+        exportCtx.strokeStyle = borderColor;
+        exportCtx.lineWidth = 2;
+        exportCtx.fillRect(x + offsetX - w/2, y + offsetY - h/2, w, h);
+        exportCtx.strokeRect(x + offsetX - w/2, y + offsetY - h/2, w, h);
+      }
+
+      function drawExportDiamond(x, y, size) {
+        exportCtx.fillStyle = '#e8eaf6';
+        exportCtx.strokeStyle = '#333';
+        exportCtx.lineWidth = 2;
+        exportCtx.beginPath();
+        exportCtx.moveTo(x + offsetX, y + offsetY - size/2);
+        exportCtx.lineTo(x + offsetX + size/2, y + offsetY);
+        exportCtx.lineTo(x + offsetX, y + offsetY + size/2);
+        exportCtx.lineTo(x + offsetX - size/2, y + offsetY);
+        exportCtx.closePath();
+        exportCtx.fill();
+        exportCtx.stroke();
+      }
+
+      function drawExportEllipse(x, y, w, h, isPK) {
+        if (isPK) {
+          exportCtx.fillStyle = '#fff9c4';
+          exportCtx.strokeStyle = '#f57f17';
+        } else {
+          exportCtx.fillStyle = '#fff';
+          exportCtx.strokeStyle = '#333';
+        }
+        exportCtx.lineWidth = 2;
+        exportCtx.beginPath();
+        exportCtx.ellipse(x + offsetX, y + offsetY, w/2, h/2, 0, 0, 2 * Math.PI);
+        exportCtx.fill();
+        exportCtx.stroke();
+      }
+
+      function drawExportText(text, x, y, size = 14, color = '#333') {
+        exportCtx.fillStyle = color;
+        exportCtx.font = `${size}px sans-serif`;
+        exportCtx.textAlign = 'center';
+        exportCtx.textBaseline = 'middle';
+        exportCtx.fillText(text, x + offsetX, y + offsetY);
+      }
+
+      // 属性连线
+      if (showAllAttributes) {
+        entities.forEach(entity => {
+          entity.attributes.forEach(attr => {
+            drawExportLine(entity.x, entity.y, attr.x, attr.y);
+          });
+        });
+      }
+
+      // 关系连线
+      relationships.forEach(rel => {
+        const fromEntity = getEntity(rel.from);
+        const toEntity = getEntity(rel.to);
+        if (fromEntity && toEntity) {
+          drawExportLine(fromEntity.x, fromEntity.y, rel.x, rel.y);
+          drawExportLine(rel.x, rel.y, toEntity.x, toEntity.y);
+
+          // 基数
+          exportCtx.font = 'bold 14px sans-serif';
+          exportCtx.textAlign = 'center';
+          exportCtx.fillStyle = '#c62828';
+
+          const fromMidX = (fromEntity.x + rel.x) / 2;
+          const fromMidY = (fromEntity.y + rel.y) / 2;
+          exportCtx.fillText(rel.fromCard, fromMidX + offsetX, fromMidY + offsetY - 10);
+
+          const toMidX = (toEntity.x + rel.x) / 2;
+          const toMidY = (toEntity.y + rel.y) / 2;
+          exportCtx.fillText(rel.toCard, toMidX + offsetX, toMidY + offsetY - 10);
+        }
+      });
+
+      // 属性
+      if (showAllAttributes) {
+        entities.forEach(entity => {
+          entity.attributes.forEach(attr => {
+            drawExportEllipse(attr.x, attr.y, ellipseWidth, ellipseHeight, attr.isPK);
+            drawExportText(attr.name, attr.x, attr.y, 11, attr.isPK ? '#e65100' : '#333');
+          });
+        });
+      }
+
+      // 实体
+      entities.forEach(entity => {
+        drawExportRect(entity.x, entity.y, entityWidth, entityHeight, entity.color, entity.borderColor);
+        drawExportText(entity.name, entity.x, entity.y, 14, '#333');
+      });
+
+      // 关系
+      relationships.forEach(rel => {
+        drawExportDiamond(rel.x, rel.y, diamondSize);
+        drawExportText(rel.name, rel.x, rel.y, 12, '#333');
+      });
+
+      // 水印
+      exportCtx.fillStyle = '#999';
+      exportCtx.font = '12px sans-serif';
+      exportCtx.textAlign = 'right';
+      exportCtx.fillText('ER图 - Chen记法', exportCanvas.width - 20, exportCanvas.height - 15);
+
+      // 下载
+      const link = document.createElement('a');
+      link.download = 'er_diagram.png';
+      link.href = exportCanvas.toDataURL('image/png');
+      link.click();
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+  </script>
+</body>
+</html>
